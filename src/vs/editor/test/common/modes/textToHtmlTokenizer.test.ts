@@ -9,7 +9,7 @@ import { TokenizationRegistry, IState, LanguageIdentifier, ColorId, FontStyle, M
 import { tokenizeToString, tokenizeLineToHTML } from 'vs/editor/common/modes/textToHtmlTokenizer';
 import { MockMode } from 'vs/editor/test/common/mocks/mockMode';
 import { TokenizationResult2 } from 'vs/editor/common/core/token';
-import { ViewLineToken } from 'vs/editor/common/core/viewLineToken';
+import { ViewLineToken, ViewLineTokens } from 'vs/editor/test/common/core/viewLineToken';
 
 suite('Editor Modes - textToHtmlTokenizer', () => {
 	function toStr(pieces: { className: string; text: string }[]): string {
@@ -67,7 +67,7 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 
 	test('tokenizeLineToHTML', () => {
 		const text = 'Ciao hello world!';
-		const lineTokens = [
+		const lineTokens = new ViewLineTokens([
 			new ViewLineToken(
 				4,
 				(
@@ -100,7 +100,7 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 					| ((FontStyle.Underline) << MetadataConsts.FONT_STYLE_OFFSET)
 				) >>> 0
 			)
-		];
+		]);
 		const colorMap = [null, '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff'];
 
 		assert.equal(
@@ -108,9 +108,9 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 			[
 				'<div>',
 				'<span style="color: #ff0000;font-style: italic;font-weight: bold;">Ciao</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #00ff00;">hello</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #0000ff;text-decoration: underline;">world!</span>',
 				'</div>'
 			].join('')
@@ -121,9 +121,9 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 			[
 				'<div>',
 				'<span style="color: #ff0000;font-style: italic;font-weight: bold;">Ciao</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #00ff00;">hello</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #0000ff;text-decoration: underline;">w</span>',
 				'</div>'
 			].join('')
@@ -134,9 +134,9 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 			[
 				'<div>',
 				'<span style="color: #ff0000;font-style: italic;font-weight: bold;">Ciao</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #00ff00;">hello</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'</div>'
 			].join('')
 		);
@@ -146,9 +146,9 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 			[
 				'<div>',
 				'<span style="color: #ff0000;font-style: italic;font-weight: bold;">iao</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #00ff00;">hello</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'</div>'
 			].join('')
 		);
@@ -157,9 +157,9 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 			tokenizeLineToHTML(text, lineTokens, colorMap, 4, 11, 4),
 			[
 				'<div>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'<span style="color: #00ff00;">hello</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'</div>'
 			].join('')
 		);
@@ -169,7 +169,7 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 			[
 				'<div>',
 				'<span style="color: #00ff00;">hello</span>',
-				'<span style="color: #000000;">&nbsp;</span>',
+				'<span style="color: #000000;"> </span>',
 				'</div>'
 			].join('')
 		);
@@ -197,7 +197,7 @@ suite('Editor Modes - textToHtmlTokenizer', () => {
 
 class Mode extends MockMode {
 
-	private static _id = new LanguageIdentifier('textToHtmlTokenizerMode', 3);
+	private static readonly _id = new LanguageIdentifier('textToHtmlTokenizerMode', 3);
 
 	constructor() {
 		super(Mode._id);

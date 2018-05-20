@@ -9,10 +9,11 @@ import { localize } from 'vs/nls';
 import { TPromise } from 'vs/base/common/winjs.base';
 import { EditorInput } from 'vs/workbench/common/editor';
 import { IExtension } from 'vs/workbench/parts/extensions/common/extensions';
+import URI from 'vs/base/common/uri';
 
 export class ExtensionsInput extends EditorInput {
 
-	static get ID() { return 'workbench.extensions.input2'; }
+	static readonly ID = 'workbench.extensions.input2';
 	get extension(): IExtension { return this._extension; }
 
 	constructor(private _extension: IExtension) {
@@ -44,5 +45,12 @@ export class ExtensionsInput extends EditorInput {
 
 	supportsSplitEditor(): boolean {
 		return false;
+	}
+
+	getResource(): URI {
+		return URI.from({
+			scheme: 'extension',
+			path: this.extension.id
+		});
 	}
 }

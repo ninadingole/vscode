@@ -6,20 +6,19 @@
 'use strict';
 
 import { TPromise } from 'vs/base/common/winjs.base';
-import paths = require('vs/base/common/paths');
+import * as paths from 'vs/base/common/paths';
 import URI from 'vs/base/common/uri';
 import { IModeService } from 'vs/editor/common/services/modeService';
-import pfs = require('vs/base/node/pfs');
+import * as pfs from 'vs/base/node/pfs';
 import { CommandsRegistry } from 'vs/platform/commands/common/commands';
 import { IInstantiationService, ServicesAccessor } from 'vs/platform/instantiation/common/instantiation';
-import { IThemeService, IColorTheme } from 'vs/workbench/services/themes/common/themeService';
+import { IWorkbenchThemeService, IColorTheme } from 'vs/workbench/services/themes/common/workbenchThemeService';
 import { IWorkbenchEditorService } from 'vs/workbench/services/editor/common/editorService';
 import { toResource } from 'vs/workbench/common/editor';
-import { ITextMateService } from 'vs/editor/node/textMate/textMateService';
+import { ITextMateService } from 'vs/workbench/services/textMate/electron-browser/textMateService';
 import { IGrammar, StackElement } from 'vscode-textmate';
-import { TokenizationRegistry } from 'vs/editor/common/modes';
-import { TokenMetadata } from 'vs/editor/common/model/tokensBinaryEncoding';
-import { ThemeRule, findMatchingThemeRule } from 'vs/editor/electron-browser/textMate/TMHelper';
+import { TokenizationRegistry, TokenMetadata } from 'vs/editor/common/modes';
+import { ThemeRule, findMatchingThemeRule } from 'vs/workbench/services/textMate/electron-browser/TMHelper';
 import { Color } from 'vs/base/common/color';
 
 interface IToken {
@@ -58,11 +57,7 @@ class ThemeDocument {
 	}
 
 	private _generateExplanation(selector: string, color: Color): string {
-		let rgba = color.toRGBA();
-		if (rgba.a === 255) {
-			return `${selector}: ${color.toRGBHex().toUpperCase()}`;
-		}
-		return `${selector}: ${color.toRGBAHex().toUpperCase()}`;
+		return `${selector}: ${Color.Format.CSS.formatHexA(color, true).toUpperCase()}`;
 	}
 
 	public explainTokenColor(scopes: string, color: Color): string {
@@ -72,14 +67,14 @@ class ThemeDocument {
 			let expected = Color.fromHex(this._defaultColor);
 			// No matching rule
 			if (!color.equals(expected)) {
-				throw new Error(`[${this._theme.label}]: Unexpected color ${color.toRGBAHex()} for ${scopes}. Expected default ${expected.toRGBAHex()}`);
+				throw new Error(`[${this._theme.label}]: Unexpected color ${Color.Format.CSS.formatHexA(color)} for ${scopes}. Expected default ${Color.Format.CSS.formatHexA(expected)}`);
 			}
 			return this._generateExplanation('default', color);
 		}
 
 		let expected = Color.fromHex(matchingRule.settings.foreground);
 		if (!color.equals(expected)) {
-			throw new Error(`[${this._theme.label}]: Unexpected color ${color.toRGBAHex()} for ${scopes}. Expected ${expected.toRGBAHex()} coming in from ${matchingRule.rawSelector}`);
+			throw new Error(`[${this._theme.label}]: Unexpected color ${Color.Format.CSS.formatHexA(color)} for ${scopes}. Expected ${Color.Format.CSS.formatHexA(expected)} coming in from ${matchingRule.rawSelector}`);
 		}
 		return this._generateExplanation(matchingRule.rawSelector, color);
 	}
@@ -96,7 +91,7 @@ class Snapper {
 
 	constructor(
 		@IModeService private modeService: IModeService,
-		@IThemeService private themeService: IThemeService,
+		@IWorkbenchThemeService private themeService: IWorkbenchThemeService,
 		@ITextMateService private textMateService: ITextMateService
 	) {
 	}
@@ -268,4 +263,3 @@ CommandsRegistry.registerCommand('_workbench.captureSyntaxTokens', function (acc
 	}
 	return undefined;
 });
-

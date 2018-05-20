@@ -6,15 +6,12 @@
 'use strict';
 
 import 'vs/css!./toolbar';
-import nls = require('vs/nls');
+import * as nls from 'vs/nls';
 import { TPromise } from 'vs/base/common/winjs.base';
-import { IDisposable } from 'vs/base/common/lifecycle';
-import { Builder, $ } from 'vs/base/browser/builder';
-import types = require('vs/base/common/types');
 import { Action, IActionRunner, IAction } from 'vs/base/common/actions';
-import { ActionBar, ActionsOrientation, IActionItemProvider, BaseActionItem } from 'vs/base/browser/ui/actionbar/actionbar';
-import { IContextMenuProvider, DropdownMenu, IActionProvider, ILabelRenderer, IDropdownMenuOptions } from 'vs/base/browser/ui/dropdown/dropdown';
-import { Keybinding } from 'vs/base/common/keyCodes';
+import { ActionBar, ActionsOrientation, IActionItemProvider } from 'vs/base/browser/ui/actionbar/actionbar';
+import { IContextMenuProvider, DropdownMenuActionItem } from 'vs/base/browser/ui/dropdown/dropdown';
+import { ResolvedKeybinding } from 'vs/base/common/keyCodes';
 
 export const CONTEXT = 'context.toolbar';
 
@@ -22,8 +19,8 @@ export interface IToolBarOptions {
 	orientation?: ActionsOrientation;
 	actionItemProvider?: IActionItemProvider;
 	ariaLabel?: string;
-	getKeyBinding?: (action: IAction) => Keybinding;
-	getKeyBindingLabel?: (key: Keybinding) => string;
+	getKeyBinding?: (action: IAction) => ResolvedKeybinding;
+	actionRunner?: IActionRunner;
 }
 
 /**
@@ -39,7 +36,7 @@ export class ToolBar {
 
 	constructor(container: HTMLElement, contextMenuProvider: IContextMenuProvider, options: IToolBarOptions = { orientation: ActionsOrientation.HORIZONTAL }) {
 		this.options = options;
-		this.lookupKeybindings = typeof this.options.getKeyBinding === 'function' && typeof this.options.getKeyBindingLabel === 'function';
+		this.lookupKeybindings = typeof this.options.getKeyBinding === 'function';
 
 		this.toggleMenuAction = new ToggleMenuAction(() => this.toggleMenuActionItem && this.toggleMenuActionItem.show());
 
@@ -47,9 +44,10 @@ export class ToolBar {
 		element.className = 'monaco-toolbar';
 		container.appendChild(element);
 
-		this.actionBar = new ActionBar($(element), {
+		this.actionBar = new ActionBar(element, {
 			orientation: options.orientation,
 			ariaLabel: options.ariaLabel,
+			actionRunner: options.actionRunner,
 			actionItemProvider: (action: Action) => {
 
 				// Return special action item for the toggle menu action
@@ -95,8 +93,16 @@ export class ToolBar {
 		}
 	}
 
-	public getContainer(): Builder {
+	public getContainer(): HTMLElement {
 		return this.actionBar.getContainer();
+	}
+
+	public getItemsWidth(): number {
+		let itemsWidth = 0;
+		for (let i = 0; i < this.actionBar.length(); i++) {
+			itemsWidth += this.actionBar.getWidth(i);
+		}
+		return itemsWidth;
 	}
 
 	public setAriaLabel(label: string): void {
@@ -125,7 +131,7 @@ export class ToolBar {
 	private getKeybindingLabel(action: IAction): string {
 		const key = this.lookupKeybindings ? this.options.getKeyBinding(action) : void 0;
 
-		return key ? this.options.getKeyBindingLabel(key) : void 0;
+		return key ? key.getLabel() : void 0;
 	}
 
 	public addPrimaryAction(primaryAction: IAction): () => void {
@@ -156,7 +162,7 @@ export class ToolBar {
 
 class ToggleMenuAction extends Action {
 
-	public static ID = 'toolbar.toggle.more';
+	public static readonly ID = 'toolbar.toggle.more';
 
 	private _menuActions: IAction[];
 	private toggleDropdownMenu: () => void;
@@ -179,89 +185,5 @@ class ToggleMenuAction extends Action {
 
 	public set menuActions(actions: IAction[]) {
 		this._menuActions = actions;
-	}
-}
-
-export class DropdownMenuActionItem extends BaseActionItem {
-	private menuActionsOrProvider: any;
-	private dropdownMenu: DropdownMenu;
-	private toUnbind: IDisposable;
-	private contextMenuProvider: IContextMenuProvider;
-	private actionItemProvider: IActionItemProvider;
-	private keybindings: (action: IAction) => Keybinding;
-	private clazz: string;
-
-	constructor(action: IAction, menuActions: IAction[], contextMenuProvider: IContextMenuProvider, actionItemProvider: IActionItemProvider, actionRunner: IActionRunner, keybindings: (action: IAction) => Keybinding, clazz: string);
-	constructor(action: IAction, actionProvider: IActionProvider, contextMenuProvider: IContextMenuProvider, actionItemProvider: IActionItemProvider, actionRunner: IActionRunner, keybindings: (action: IAction) => Keybinding, clazz: string);
-	constructor(action: IAction, menuActionsOrProvider: any, contextMenuProvider: IContextMenuProvider, actionItemProvider: IActionItemProvider, actionRunner: IActionRunner, keybindings: (action: IAction) => Keybinding, clazz: string) {
-		super(null, action);
-
-		this.menuActionsOrProvider = menuActionsOrProvider;
-		this.contextMenuProvider = contextMenuProvider;
-		this.actionItemProvider = actionItemProvider;
-		this.actionRunner = actionRunner;
-		this.keybindings = keybindings;
-		this.clazz = clazz;
-	}
-
-	public render(container: HTMLElement): void {
-		let labelRenderer: ILabelRenderer = (el: HTMLElement): IDisposable => {
-			this.builder = $('a.action-label').attr({
-				tabIndex: '0',
-				role: 'button',
-				'aria-haspopup': 'true',
-				title: this._action.label || '',
-				class: this.clazz
-			});
-
-			this.builder.appendTo(el);
-
-			return null;
-		};
-
-		let options: IDropdownMenuOptions = {
-			contextMenuProvider: this.contextMenuProvider,
-			labelRenderer: labelRenderer
-		};
-
-		// Render the DropdownMenu around a simple action to toggle it
-		if (types.isArray(this.menuActionsOrProvider)) {
-			options.actions = this.menuActionsOrProvider;
-		} else {
-			options.actionProvider = this.menuActionsOrProvider;
-		}
-
-		this.dropdownMenu = new DropdownMenu(container, options);
-
-		this.dropdownMenu.menuOptions = {
-			actionItemProvider: this.actionItemProvider,
-			actionRunner: this.actionRunner,
-			getKeyBinding: this.keybindings,
-			context: this._context
-		};
-
-		// Reemit events for running actions
-		this.toUnbind = this.addEmitter2(this.dropdownMenu);
-	}
-
-	public setActionContext(newContext: any): void {
-		super.setActionContext(newContext);
-
-		if (this.dropdownMenu) {
-			this.dropdownMenu.menuOptions.context = newContext;
-		}
-	}
-
-	public show(): void {
-		if (this.dropdownMenu) {
-			this.dropdownMenu.show();
-		}
-	}
-
-	public dispose(): void {
-		this.toUnbind.dispose();
-		this.dropdownMenu.dispose();
-
-		super.dispose();
 	}
 }

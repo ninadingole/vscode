@@ -6,7 +6,7 @@
 'use strict';
 
 import * as assert from 'assert';
-import { FileEditorTracker } from 'vs/workbench/parts/files/common/editors/fileEditorTracker';
+import { FileEditorTracker } from 'vs/workbench/parts/files/browser/editors/fileEditorTracker';
 import URI from 'vs/base/common/uri';
 import { join } from 'vs/base/common/paths';
 import { FileEditorInput } from 'vs/workbench/parts/files/common/editors/fileEditorInput';
@@ -16,19 +16,19 @@ import { IInstantiationService } from 'vs/platform/instantiation/common/instanti
 import { IEditorGroupService } from 'vs/workbench/services/group/common/groupService';
 import { EditorStacksModel } from 'vs/workbench/common/editor/editorStacksModel';
 import { ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
-import { FileOperation, FileOperationEvent, FileChangesEvent, FileChangeType, IFileService } from 'vs/platform/files/common/files';
+import { FileOperation, FileOperationEvent, FileChangesEvent, FileChangeType, IFileService, snapshotToString } from 'vs/platform/files/common/files';
 import { TextFileEditorModel } from 'vs/workbench/services/textfile/common/textFileEditorModel';
 import { once } from 'vs/base/common/event';
 
 class TestFileEditorTracker extends FileEditorTracker {
 
-	setCloseOnExternalFileDelete(value: boolean): void {
-		this.closeOnExternalFileDelete = value;
+	setCloseOnFileDelete(value: boolean): void {
+		this.closeOnFileDelete = value;
 	}
 }
 
-function toResource(path) {
-	return URI.file(join('C:\\', new Buffer(this.test.fullTitle()).toString('base64'), path));
+function toResource(self: any, path: string) {
+	return URI.file(join('C:\\', Buffer.from(self.test.fullTitle()).toString('base64'), path));
 }
 
 class ServiceAccessor {
@@ -58,8 +58,8 @@ suite('Files - FileEditorTracker', () => {
 		const tracker = instantiationService.createInstance(FileEditorTracker);
 		assert.ok(tracker);
 
-		const parent = toResource.call(this, '/foo/bar');
-		const resource = toResource.call(this, '/foo/bar/updatefile.js');
+		const parent = toResource(this, '/foo/bar');
+		const resource = toResource(this, '/foo/bar/updatefile.js');
 		let input = instantiationService.createInstance(FileEditorInput, resource, void 0);
 		group.openEditor(input);
 
@@ -72,7 +72,7 @@ suite('Files - FileEditorTracker', () => {
 		input = instantiationService.createInstance(FileEditorInput, resource, void 0);
 		group.openEditor(input);
 
-		const other = toResource.call(this, '/foo/barfoo');
+		const other = toResource(this, '/foo/barfoo');
 
 		accessor.fileService.fireAfterOperation(new FileOperationEvent(other, FileOperation.DELETE));
 		assert.ok(!input.isDisposed());
@@ -81,7 +81,45 @@ suite('Files - FileEditorTracker', () => {
 		assert.ok(input.isDisposed());
 
 		// Move
-		const to = toResource.call(this, '/foo/barfoo/change.js');
+		const to: any = toResource(this, '/foo/barfoo/change.js');
+		accessor.fileService.fireAfterOperation(new FileOperationEvent(resource, FileOperation.MOVE, to));
+		assert.ok(input.isDisposed());
+
+		tracker.dispose();
+	});
+
+	test('disposes input when resource gets deleted - local file changes - even when closeOnFileDelete = false', function () {
+		const stacks = accessor.editorGroupService.getStacksModel() as EditorStacksModel;
+		const group = stacks.openGroup('first', true);
+
+		const tracker = instantiationService.createInstance(TestFileEditorTracker);
+		tracker.setCloseOnFileDelete(false);
+		assert.ok(tracker);
+
+		const parent = toResource(this, '/foo/bar');
+		const resource = toResource(this, '/foo/bar/updatefile.js');
+		let input = instantiationService.createInstance(FileEditorInput, resource, void 0);
+		group.openEditor(input);
+
+		assert.ok(!input.isDisposed());
+
+		accessor.fileService.fireAfterOperation(new FileOperationEvent(resource, FileOperation.DELETE));
+		assert.ok(input.isDisposed());
+		group.closeEditor(input);
+
+		input = instantiationService.createInstance(FileEditorInput, resource, void 0);
+		group.openEditor(input);
+
+		const other = toResource(this, '/foo/barfoo');
+
+		accessor.fileService.fireAfterOperation(new FileOperationEvent(other, FileOperation.DELETE));
+		assert.ok(!input.isDisposed());
+
+		accessor.fileService.fireAfterOperation(new FileOperationEvent(parent, FileOperation.DELETE));
+		assert.ok(input.isDisposed());
+
+		// Move
+		const to: any = toResource(this, '/foo/barfoo/change.js');
 		accessor.fileService.fireAfterOperation(new FileOperationEvent(resource, FileOperation.MOVE, to));
 		assert.ok(input.isDisposed());
 
@@ -95,8 +133,8 @@ suite('Files - FileEditorTracker', () => {
 		const tracker = instantiationService.createInstance(FileEditorTracker);
 		assert.ok(tracker);
 
-		const parent = toResource.call(this, '/foo/bar');
-		const resource = toResource.call(this, '/foo/bar/updatefile.js');
+		const parent = toResource(this, '/foo/bar');
+		const resource = toResource(this, '/foo/bar/updatefile.js');
 		let input = instantiationService.createInstance(FileEditorInput, resource, void 0);
 		group.openEditor(input);
 
@@ -111,7 +149,7 @@ suite('Files - FileEditorTracker', () => {
 			input = instantiationService.createInstance(FileEditorInput, resource, void 0);
 			group.openEditor(input);
 
-			const other = toResource.call(this, '/foo/barfoo');
+			const other = toResource(this, '/foo/barfoo');
 
 			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource: other, type: FileChangeType.DELETED }]));
 			assert.ok(!input.isDisposed());
@@ -127,73 +165,42 @@ suite('Files - FileEditorTracker', () => {
 		});
 	});
 
-	test('marks dirty when resource gets deleted and undirty when added again - remote file changes - closeOnExternalFileDelete = false', function (done) {
+	test('keeps open when resource gets deleted - remote file changes - closeOnFileDelete = false', function () {
 		const stacks = accessor.editorGroupService.getStacksModel() as EditorStacksModel;
 		const group = stacks.openGroup('first', true);
 
 		const tracker = instantiationService.createInstance(TestFileEditorTracker);
-		tracker.setCloseOnExternalFileDelete(false);
+		tracker.setCloseOnFileDelete(false);
 		assert.ok(tracker);
 
-		const resource = toResource.call(this, '/foo/bar/updatefile.js');
+		const resource = toResource(this, '/foo/bar/updatefile.js');
 		let input = instantiationService.createInstance(FileEditorInput, resource, void 0);
 		group.openEditor(input);
 
-		input.resolve().then(() => {
-			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.DELETED }]));
-			assert.equal(input.isDirty(), true);
+		accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.DELETED }]));
 
-			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.ADDED }]));
-			assert.equal(input.isDirty(), false);
+		assert.ok(!input.isDisposed());
 
-			done();
-		});
+		tracker.dispose();
 	});
 
-	test('marks dirty when resource gets deleted and undirty when added again unless model changed meanwhile - remote file changes - closeOnExternalFileDelete = false', function (done) {
-		const stacks = accessor.editorGroupService.getStacksModel() as EditorStacksModel;
-		const group = stacks.openGroup('first', true);
-
-		const tracker = instantiationService.createInstance(TestFileEditorTracker);
-		tracker.setCloseOnExternalFileDelete(false);
-		assert.ok(tracker);
-
-		const resource = toResource.call(this, '/foo/bar/updatefile.js');
-		let input = instantiationService.createInstance(FileEditorInput, resource, void 0);
-		group.openEditor(input);
-
-		input.resolve().then(model => {
-			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.DELETED }]));
-			assert.equal(input.isDirty(), true);
-
-			model.textEditorModel.setValue('This is cool');
-
-			accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.ADDED }]));
-			assert.equal(input.isDirty(), true);
-
-			done();
-		});
-	});
-
-	test('file change event updates model', function (done) {
+	test('file change event updates model', function () {
 		const tracker = instantiationService.createInstance(FileEditorTracker);
 
-		const resource = toResource.call(this, '/path/index.txt');
+		const resource = toResource(this, '/path/index.txt');
 
-		accessor.textFileService.models.loadOrCreate(resource).then((model: TextFileEditorModel) => {
+		return accessor.textFileService.models.loadOrCreate(resource).then((model: TextFileEditorModel) => {
 			model.textEditorModel.setValue('Super Good');
-			assert.equal(model.getValue(), 'Super Good');
+			assert.equal(snapshotToString(model.createSnapshot()), 'Super Good');
 
-			model.save().then(() => {
+			return model.save().then(() => {
 
 				// change event (watcher)
 				accessor.fileService.fireFileChanges(new FileChangesEvent([{ resource, type: FileChangeType.UPDATED }]));
 
-				assert.equal(model.getValue(), 'Hello Html');
+				assert.equal(snapshotToString(model.createSnapshot()), 'Hello Html');
 
 				tracker.dispose();
-
-				done();
 			});
 		});
 	});
